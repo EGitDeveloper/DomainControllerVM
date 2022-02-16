@@ -1,0 +1,321 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "type": "string",
+      "metadata": {
+        "description": "Location to use for the resources. Defaults to resource group location."
+      },
+      "defaultValue": "[resourceGroup().location]"
+    },
+    "vNetName": {
+      "type": "string",
+      "defaultValue": "vnet1",
+      "metadata": {
+        "description": "Virtual network name."
+      }
+    },
+    "vNetAddressRange": {
+      "type": "string",
+      "defaultValue": "10.0.0.0/16",
+      "metadata": {
+        "description": "Address range for virtual network."
+      }
+    },
+    "vNetDCSubnetName": {
+      "type": "string",
+      "defaultValue": "dc-subnet",
+      "metadata": {
+        "description": "Domain controller subnet name."
+      }
+    },
+    "vNetDCSubnetAddressRange": {
+      "type": "string",
+      "defaultValue": "10.0.1.0/24",
+      "metadata": {
+        "description": "Domain controller subnet address range."
+      }
+    },
+    "resourceSubnetName": {
+      "type": "string",
+      "defaultValue": "resources-subnet",
+      "metadata": {
+        "description": "Resources subnet name."
+      }
+    },
+    "resourceSubnetAddressRange": {
+      "type": "string",
+      "defaultValue": "10.0.2.0/24",
+      "metadata": {
+        "description": "Resources subnet address range."
+      }
+    },
+    "DCVMName": {
+      "type": "string",
+      "defaultValue": "dcvm1",
+      "metadata": {
+        "description": "Domain controller virtual machine name."
+      }
+    },
+    "DCVMPrivateIP": {
+      "type": "string",
+      "defaultValue": "10.0.1.4",
+      "metadata": {
+        "description": "Domain controller IP address. Must be in Domain controller subnet."
+      }
+    },
+    "DCVMSize": {
+      "type": "string",
+      "defaultValue": "Standard_D2s_v3"
+    },
+    "DCAdminUser": {
+      "type": "string"
+    },
+    "DCAdminPassword": {
+      "type": "securestring"
+    },
+    "domainName": {
+      "type": "securestring",
+      "defaultValue": "some-domain.com",
+      "metadata": {
+        "description": "Domain name."
+      }
+    },
+    "_artifactLocation": {
+      "type": "string",
+      "defaultValue": "[deployment().properties.templateLink.uri]"
+    },
+    "_artifactLocationSASToken": {
+      "type": "string",
+      "defaultValue": ""
+    }
+  },
+  "functions": [],
+  "variables": {
+    "createADForestDSCLocation": "[concat(parameters('_artifactLocation'), concat('/DSC/CreateADPDC.zip', parameters('_artifactLocationSASToken')))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "apiVersion": "2020-11-01",
+      "location": "[parameters('location')]",
+      "name": "[concat(parameters('vNetDCSubnetName'), '-nsg')]",
+      "properties": {
+        "securityRules": [
+          {
+            "name": "RDP",
+            "properties": {
+              "description": "Allow RDP",
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "3389",
+              "sourceAddressPrefix": "Internet",
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 100,
+              "direction": "Inbound"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "apiVersion": "2020-11-01",
+      "location": "[parameters('location')]",
+      "name": "[concat(parameters('resourceSubnetName'), '-nsg')]",
+      "properties": {
+        "securityRules": []
+      }
+    },
+    {
+      "type": "Microsoft.Network/virtualNetworks",
+      "apiVersion": "2020-11-01",
+      "location": "[parameters('location')]",
+      "name": "[parameters('vNetName')]",
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": ["[parameters('vNetAddressRange')]"]
+        },
+        "subnets": [
+          {
+            "name": "[parameters('vNetDCSubnetName')]",
+            "properties": {
+              "addressPrefix": "[parameters('vNetDCSubnetAddressRange')]"
+            }
+          },
+          {
+            "name": "[parameters('resourceSubnetName')]",
+            "properties": {
+              "addressPrefix": "[parameters('resourceSubnetAddressRange')]"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Network/publicIPAddresses",
+      "apiVersion": "2020-11-01",
+      "name": "[concat(parameters('DCVMName'), '-pip1')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "publicIPAllocationMethod": "Dynamic"
+      }
+    },
+    {
+      "type": "Microsoft.Network/networkInterfaces",
+      "apiVersion": "2020-11-01",
+      "name": "[concat(parameters('DCVMName'), '-nic1')]",
+      "location": "[parameters('location')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/publicIPAddresses', concat(parameters('DCVMName'), '-pip1'))]",
+        "[resourceId('Microsoft.Network/virtualNetworks', parameters('vNetName'))]"
+      ],
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "publicIPAddress": {
+                "id": "[resourceId('Microsoft.Network/publicIPAddresses',concat(parameters('DCVMName'), '-pip1'))]"
+              },
+              "privateIPAllocationMethod": "Static",
+              "privateIPAddress": "[parameters('DCVMPrivateIP')]",
+              "subnet": {
+                "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets',parameters('vNetName'),parameters('vNetDCSubnetName'))]"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Compute/virtualMachines",
+      "apiVersion": "2021-07-01",
+      "name": "[parameters('DCVMName')]",
+      "location": "[parameters('location')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkInterfaces', concat(parameters('DCVMName'), '-nic1'))]"
+      ],
+      "properties": {
+        "hardwareProfile": {
+          "vmSize": "[parameters('DCVMSize')]"
+        },
+        "osProfile": {
+          "computerName": "[parameters('DCVMName')]",
+          "adminUsername": "[parameters('DCAdminUser')]",
+          "adminPassword": "[parameters('DCAdminPassword')]"
+        },
+        "storageProfile": {
+          "imageReference": {
+            "publisher": "MicrosoftWindowsServer",
+            "offer": "WindowsServer",
+            "sku": "2019-Datacenter",
+            "version": "latest"
+          },
+          "osDisk": {
+            "name": "[concat(parameters('DCVMName'), '-os-disk')]",
+            "createOption": "FromImage",
+            "managedDisk": {
+              "storageAccountType": "Standard_LRS"
+            }
+          }
+        },
+        "licenseType": "Windows_Server",
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces',concat(parameters('DCVMName'), '-nic1'))]"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Compute/virtualMachines/extensions",
+      "apiVersion": "2021-07-01",
+      "name": "[concat(parameters('DCVMName'), '/CreateADForest')]",
+      "location": "[parameters('location')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Compute/virtualMachines', parameters('DCVMName'))]"
+      ],
+      "properties": {
+        "publisher": "Microsoft.Powershell",
+        "type": "DSC",
+        "typeHandlerVersion": "2.19",
+        "autoUpgradeMinorVersion": true,
+        "settings": {
+          "ModulesUrl": "[variables('createADForestDSCLocation')]",
+          "ConfigurationFunction": "CreateADPDC.ps1\\CreateADPDC",
+          "Properties": {
+            "DomainName": "[parameters('domainName')]",
+            "AdminCreds": {
+              "UserName": "[concat(parameters('DCAdminUser'), '@', parameters('domainName'))]",
+              "Password": "PrivateSettingsRef:AdminPassword"
+            }
+          }
+        },
+        "protectedSettings": {
+          "Items": {
+            "AdminPassword": "[parameters('DCAdminPassword')]"
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2021-04-01",
+      "name": "VNetDNSUpdate",
+      "dependsOn": [
+        "[resourceId('Microsoft.Compute/virtualMachines/extensions', parameters('DCVMName'), 'CreateADForest')]",
+        "[resourceId('Microsoft.Network/networkSecurityGroups', concat(parameters('resourceSubnetName'), '-nsg'))]",
+        "[resourceId('Microsoft.Network/networkSecurityGroups', concat(parameters('vNetDCSubnetName'), '-nsg'))]"
+      ],
+      "properties": {
+        "mode": "Incremental",
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.1",
+          "resources": [
+            {
+              "type": "Microsoft.Network/virtualNetworks",
+              "apiVersion": "2020-11-01",
+              "location": "[parameters('location')]",
+              "name": "[parameters('vNetName')]",
+              "properties": {
+                "addressSpace": {
+                  "addressPrefixes": ["[parameters('vNetAddressRange')]"]
+                },
+                "subnets": [
+                  {
+                    "name": "[parameters('vNetDCSubnetName')]",
+                    "properties": {
+                      "addressPrefix": "[parameters('vNetDCSubnetAddressRange')]",
+                      "networkSecurityGroup": {
+                        "id": "[resourceId('Microsoft.Network/networkSecurityGroups', concat(parameters('vNetDCSubnetName'), '-nsg'))]"
+                      }
+                    }
+                  },
+                  {
+                    "name": "[parameters('resourceSubnetName')]",
+                    "properties": {
+                      "addressPrefix": "[parameters('resourceSubnetAddressRange')]",
+                      "networkSecurityGroup": {
+                        "id": "[resourceId('Microsoft.Network/networkSecurityGroups', concat(parameters('resourceSubnetName'), '-nsg'))]"
+                      }
+                    }
+                  }
+                ],
+                "dhcpOptions": {
+                  "dnsServers": ["[parameters('DCVMPrivateIP')]"]
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "outputs": {}
+}
