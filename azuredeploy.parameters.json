@@ -38,7 +38,10 @@
     "domainName": {
       "value": ""
     },
-    "_artifactLocation": {
+    "_artifactsLocation": {
+      "value": ""
+    },
+    "_artifactsLocationSasToken": {
       "value": ""
     }
   }
