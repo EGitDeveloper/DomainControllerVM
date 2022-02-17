@@ -82,18 +82,24 @@
         "description": "Domain name."
       }
     },
-    "_artifactLocation": {
+    "_artifactsLocation": {
       "type": "string",
+      "metadata": {
+        "description": "The location of resources, such as templates and DSC modules, that the template depends on"
+        },
       "defaultValue": "[deployment().properties.templateLink.uri]"
     },
-    "_artifactLocationSASToken": {
-      "type": "string",
+    "_artifactsLocationSasToken": {
+      "type": "securestring",
+      "metadata": {
+        "description": "Auto-generated token to access _artifactsLocation. Leave it blank unless you need to provide your own value."
+        },
       "defaultValue": ""
     }
   },
   "functions": [],
   "variables": {
-    "createADForestDSCLocation": "[concat(parameters('_artifactLocation'), concat('/DSC/CreateADPDC.zip', parameters('_artifactLocationSASToken')))]"
+    "createADForestDSCLocation": "[concat(parameters('_artifactsLocation'), concat('/DSC/CreateADPDC.zip', parameters('_artifactsLocationSasToken')))]"
   },
   "resources": [
     {
