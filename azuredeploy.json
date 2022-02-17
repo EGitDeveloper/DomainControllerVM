@@ -76,7 +76,7 @@
       "type": "securestring"
     },
     "domainName": {
-      "type": "securestring",
+      "type": "string",
       "defaultValue": "some-domain.com",
       "metadata": {
         "description": "Domain name."
