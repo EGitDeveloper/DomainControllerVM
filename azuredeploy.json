@@ -99,7 +99,7 @@
   },
   "functions": [],
   "variables": {
-    "createADForestDSCLocation": "[concat(parameters('_artifactsLocation'), concat('/DSC/CreateADPDC.zip', parameters('_artifactsLocationSasToken')))]"
+    "createADForestDSCLocation": "https://github.com/EGitDeveloper/DomainControllerVM/raw/main/DSC/CreateADPDC.zip"
   },
   "resources": [
     {
